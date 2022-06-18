@@ -1,4 +1,3 @@
-
 from ctypes import CFUNCTYPE, POINTER, cast, c_ulonglong
 
 import networkx as nx
@@ -7,6 +6,9 @@ import llvmlite.ir as ll
 import llvmlite.binding as llvm
 
 from .descriptors import Adder, Clock, Constant, Not, Gate, Register, Composite, Counter
+
+import pickle
+import os
 
 llvm.initialize()
 llvm.initialize_native_target()
@@ -246,7 +248,28 @@ class JIT(Executor):
 
         llmod = self._llmod = llvm.parse_assembly(str(mod))
 
-        #print(str(mod), file=open('out.txt', 'w'))
+        '''
+        for n in range(len(list(root.graph.nodes))):
+            print(list(root.graph.nodes)[n])
+            
+        for i in range(len(list(enumerate(root.connections)))):
+            print(list(enumerate(root.connections))[i][1])
+        '''
+
+        # How to Save #
+        device_list = list(enumerate(root.graph.nodes))
+        connection_list = list(enumerate(root.connections))
+        os.makedirs(os.path.dirname("bin/binary.pkl"), exist_ok=True)
+        with open("bin/binary.pkl", "wb") as file:
+            pickle.dump([device_list, connection_list], file)
+            file.close()
+
+        # How to Load #
+        with open("bin/binary.pkl", "rb") as file:
+            data = pickle.load(file)
+            print(data[0])
+            print(data[1])
+            file.close()
 
         pmb = llvm.create_pass_manager_builder()
         pmb.inlining_threshold = 10000000
@@ -255,16 +278,15 @@ class JIT(Executor):
         pmb.populate(pm)
         pm.run(llmod)
 
-        # print(llmod,
-        #       file=open('out.txt', 'w'), flush=True)
-
         self._machine = llvm.Target.from_default_triple().create_target_machine(opt=3)
 
         self._ee = llvm.create_mcjit_compiler(llmod, self._machine)
         self._ee.finalize_object()
 
+        '''
         print(self._machine.emit_assembly(llmod),
               file=open('out.txt', 'w'), flush=True)
+        '''
 
         ptr = self._ee.get_function_address('step')
         self._step_func = CFUNCTYPE(None)(ptr)
